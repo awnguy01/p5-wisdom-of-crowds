@@ -1,0 +1,68 @@
+<div class="header">
+  <div class="file-upload-container">
+    <app-file-upload [formControl]="tspFileCtrl"></app-file-upload>
+  </div>
+</div>
+
+<div class="start-container" *ngIf="(currCities | async) && (currCities | async).length">
+  <div class="start-button-wrapper">
+    <button (click)="runGeneticAlgorithm(1)">Genetic Algorithm 1</button>
+    <span>Crossover Fn 1</span>
+    <span>2% Mutation Rate</span>
+  </div>
+  <div class="start-button-wrapper">
+    <button (click)="runGeneticAlgorithm(2)">Genetic Algorithm 2</button>
+    <span>Crossover Fn 1</span>
+    <span>1.5% Mutation Rate</span>
+  </div>
+  <div class="start-button-wrapper">
+    <button (click)="runGeneticAlgorithm(3)">Genetic Algorithm 3</button>
+    <span>Crossover Fn 2</span>
+    <span>2% Mutation Rate</span>
+  </div>
+  <div class="start-button-wrapper">
+    <button (click)="runGeneticAlgorithm(4)">Genetic Algorithm 4</button>
+    <span>Crossover Fn 2</span>
+    <span>1.5% Mutation Rate</span>
+  </div>
+</div>
+
+<ng-container *ngIf="currResults | async as results">
+  <div class="results-table-container">
+    <table class="results-table">
+      <thead>
+        <tr>
+          <th>Min Distance</th>
+          <th>Max Distance</th>
+          <th>Avg Distance</th>
+          <th>Standard Deviation</th>
+          <th>Generation</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>{{ results.minDistance }}</td>
+          <td>{{ results.maxDistance }}</td>
+          <td>{{ results.avgDistance }}</td>
+          <td>{{ calcStandardDeviation(results.population) }}</td>
+          <td>{{ results.generation }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <table class="results-route">
+    <tr>
+      <th>Min Route</th>
+    </tr>
+    <tr>
+      <td>[{{ routeToString(results.minRoute) }}]</td>
+    </tr>
+  </table>
+  <div class="time-elapsed">Time elapsed: {{ results.duration }}</div>
+</ng-container>
+<div class="canvas-container">
+  <div id="chartContainer"></div>
+</div>
+<div>
+  <div id="costChartContainer"></div>
+</div>
