@@ -2,13 +2,14 @@
 'use strict';
 
 import { CityNode } from '../classes/models/city-node';
-import { FitnessMap } from '../classes/models/fitness-map';
 import { Utils } from '../classes/utils';
 import { Results } from '../classes/models/results';
 import * as moment from 'moment';
-import { GAStartObject } from '../classes/models/ga-start-object';
 
-const POPULATION_SIZE = 50; // constant number of routes for each generation
+const POPULATION_SIZE = 100; // constant number of routes for each generation
+const MUTATION_RATE = 0.02;
+const MATING_POOL_PERCENTILE = 0.4;
+const MATING_POOL_SURVIVOR_PERCENTILE = 0.1;
 
 /** generateInitPopulation
  * @desc randomly generates routes to add to the initial population
@@ -41,6 +42,7 @@ const calcPopulationStats = (
 ): Results => {
   // results with placeholder values
   const results: Results = {
+    ...new Results(),
     population,
     minRoute: population[0],
     minDistance: Utils.calcTotalDistance(population[0], true),
@@ -73,162 +75,68 @@ const calcPopulationStats = (
     allDistances.reduce((sum: number, distance: number) => sum + distance) /
     allDistances.length;
 
+  const minRoute = results.minRoute;
+  results.minRoute = [...minRoute, minRoute[0]];
+  const maxRoute = results.maxRoute;
+  results.maxRoute = [...maxRoute, maxRoute[0]];
+
   return results;
 };
 
 /** calcFitness
- * @desc determines the fitness based on a percentile of how close
- * the value is to the minimum value and then cubes the fitness to
- * increase the odds of being chosen as a parent
+ * @desc calculates fitness based on inverse of route distance
  */
-const calcFitness = (
-  minVal: number,
-  maxVal: number,
-  testVal: number
-): number => {
-  const minMaxDiff: number = maxVal - minVal || 1;
-  const testValPercentile: number = 1 - (testVal - minVal) / minMaxDiff;
-  return (testValPercentile * 100) ** 3;
+const calcFitness = (route: CityNode[]): number => {
+  const distance = Utils.calcTotalDistance(route, true);
+  return 1 / distance;
 };
 
-/** generateFitnessMapList
- * @desc calculate the fitness for every member in the population with
- * reference to its original index in the population for later access
+/** genOffspring3
+ * @desc third crossover function
  */
-const generateFitnessMapList = (population: CityNode[][]): FitnessMap[] => {
-  const results: Results = calcPopulationStats(population);
+const crossOver = (parentA: CityNode[], parentB: CityNode[]): CityNode[][] => {
+  const routeLength = parentA.length;
 
-  return population.map(
-    (route: CityNode[], index: number): FitnessMap => ({
-      originalIndex: index,
-      fitnessValue: calcFitness(
-        results.minDistance,
-        results.maxDistance,
-        Utils.calcTotalDistance(route, true)
-      )
-    })
+  const getRandIndex = () => Math.floor(Math.random() * routeLength);
+  const sliceIndexA1 = getRandIndex();
+  const sliceIndexA2 = getRandIndex();
+  const sliceIndexB1 = getRandIndex();
+  const sliceIndexB2 = getRandIndex();
+  const childA: CityNode[] = parentA.slice(
+    Math.min(sliceIndexA1, sliceIndexA2),
+    Math.max(sliceIndexA1, sliceIndexA2)
   );
-};
-
-/** selectParentRoutes
- * @desc selects two parents based on their fitness as a probability
- */
-const selectParentRoutes = (
-  originalFitnessMapList: FitnessMap[],
-  population: CityNode[][]
-): CityNode[][] => {
-  const fitnessMapList = [...originalFitnessMapList];
-
-  // sorts to fitness map for the RNG to select the routes with highest fitness value first
-  fitnessMapList.sort(
-    (fitnessA: FitnessMap, fitnessB: FitnessMap) =>
-      fitnessB.fitnessValue - fitnessA.fitnessValue
+  const childB: CityNode[] = parentB.slice(
+    Math.min(sliceIndexB1, sliceIndexB2),
+    Math.max(sliceIndexB1, sliceIndexB2)
   );
-
-  // total of al fitness values
-  let aggregateFitness = 0;
-  fitnessMapList.forEach(
-    (fitness: FitnessMap) => (aggregateFitness += fitness.fitnessValue)
-  );
-
-  // parent fitness values
-  const randomFitnessA: number = Math.random() * aggregateFitness;
-  const randomFitnessB: number = Math.random() * aggregateFitness;
-
-  // if total population fitness minus the fitness of a route
-  // is below the RNG fitness, select that route as a parent
-  let parentA: CityNode[] = [];
-  let parentB: CityNode[] = [];
-  for (let i = 0; i < population.length; i++) {
-    aggregateFitness -= fitnessMapList[i].fitnessValue;
-    if (aggregateFitness <= randomFitnessA) {
-      parentA = population[fitnessMapList[i].originalIndex];
-    }
-    if (aggregateFitness <= randomFitnessB) {
-      parentB = population[fitnessMapList[i].originalIndex];
-    }
-    if (parentA.length && parentB.length) {
-      break;
-    }
-  }
-
-  if (!parentA.length || !parentB.length) {
-    console.error('Could not generate parents');
-  }
-  return [parentA, parentB];
-};
-
-/** genOffspring
- * @desc first crossover function
- */
-const genOffspring = (
-  parentA: CityNode[],
-  parentB: CityNode[]
-): CityNode[][] => {
-  const popLength = parentA.length;
-
-  // randomly selects the index at which the nodes to the
-  // left of each parent is copied to the new offspring
-  const crossOverPoint = Math.floor(Math.random() * popLength);
-  const childA: CityNode[] = parentA.slice(0, crossOverPoint);
-  const childB: CityNode[] = parentB.slice(0, crossOverPoint);
 
   // fill the remaining nodes in each offspring with the
   // missing nodes in the order the appear in the other parent
-  const fillRemaining = (child: CityNode[], parent: CityNode[]) => {
+  const fillRemaining = (
+    child: CityNode[],
+    parent: CityNode[],
+    startIndex: number
+  ) => {
+    let preFillCounter = 0;
     for (const node of parent) {
-      if (child.length === popLength) {
+      if (child.length === routeLength) {
         break;
       }
       if (!child.includes(node)) {
-        child.push(node);
+        if (preFillCounter < startIndex) {
+          child.unshift(node);
+          preFillCounter++;
+        } else {
+          child.push(node);
+        }
       }
     }
   };
-  fillRemaining(childA, parentB);
-  fillRemaining(childB, parentA);
+  fillRemaining(childA, parentB, Math.min(sliceIndexA1, sliceIndexA2));
+  fillRemaining(childB, parentA, Math.min(sliceIndexB1, sliceIndexB2));
 
   return [childA, childB];
-};
-
-/** genOffspring2
- * @desc second crossover function
- */
-const genOffspring2 = (
-  parentA: CityNode[],
-  parentB: CityNode[]
-): CityNode[][] => {
-  const childRoute: CityNode[] = [parentA[0]];
-
-  // indices for each parent
-  let indexA = 1;
-  let indexB = 0;
-  while (
-    childRoute.length < parentA.length &&
-    indexA < parentA.length &&
-    indexB < parentB.length
-  ) {
-    // increments each index until the node at each index is not in the child route
-    let destA: CityNode = parentA[indexA];
-    let destB: CityNode = parentB[indexB];
-    while (indexA < parentA.length && childRoute.includes(destA)) {
-      indexA++;
-      destA = parentA[indexA];
-    }
-    while (indexB < parentB.length && childRoute.includes(destB)) {
-      indexB++;
-      destB = parentB[indexB];
-    }
-
-    const lastChildNode: CityNode = childRoute[childRoute.length - 1];
-    const distA = Utils.calcDistance(destA, lastChildNode);
-    const distB = Utils.calcDistance(destB, lastChildNode);
-
-    // add the node from the parent that has the closest
-    // distance to the last node in the child route
-    childRoute.push(Math.min(distA, distB) === distA ? destA : destB);
-  }
-  return [childRoute];
 };
 
 /** mutate
@@ -254,68 +162,90 @@ const mutate = (route: CityNode[], mutationRate: number): CityNode[] => {
 /** startGeneticAlgorithm
  * @desc main driver to execute a specified genetic algorithm
  */
-const startGeneticAlgorithm = (startObject: GAStartObject): void => {
+const startGeneticAlgorithm = (allCities: CityNode[]): void => {
   const startTime = moment();
-  const population: CityNode[][] = generateInitPopulation(
-    startObject.allCities
-  );
+  let population: CityNode[][] = generateInitPopulation(allCities);
   let generation = 0;
-
-  // get initial results
-  let currStats: Results = calcPopulationStats([...population], generation++);
-  postMessage(currStats);
+  let leastDistanceSoFar: number = null;
+  let repeatCounter = 0;
 
   do {
-    const currBestPopulation: CityNode[][] = [...currStats.population];
-    const childPopulation: CityNode[][] = [];
-    const fitnessMapList: FitnessMap[] = generateFitnessMapList(
-      currBestPopulation
-    );
-
-    // create more offspring until population size is reached
-    while (childPopulation.length < POPULATION_SIZE) {
-      // select the parent routes
-      const parents: CityNode[][] = selectParentRoutes(
-        fitnessMapList,
-        currBestPopulation
-      );
-      if (parents.length === 2) {
-        // selects the crossover function and mutation
-        // rates based on the specified algorithm number
-        const algNr: number = startObject.algorithm;
-        const mutationRate = algNr % 2 === 0 ? 0.015 : 0.02;
-        const crossOverFn = algNr <= 2 ? genOffspring : genOffspring2;
-
-        // crossover the parents to produce the offspring
-        let routeChildren = crossOverFn(parents[0], parents[1]);
-
-        // potentially mutate the offspring
-        routeChildren = routeChildren.map((child: CityNode[]) =>
-          mutate(child, mutationRate)
-        );
-
-        // add the new offspring to the population
-        childPopulation.push(...routeChildren);
-      } else {
-        console.error('Invalid number of parents');
-      }
-    }
-
-    // update the results with the new population
-    const childPopulationStats = calcPopulationStats(
-      childPopulation,
+    // Generate initial results
+    const currStats: Results = calcPopulationStats(
+      [...population],
       generation++
     );
 
-    childPopulationStats.duration = Utils.formatTime(moment().diff(startTime));
-
-    currStats = childPopulationStats;
+    // Stopping criterion: algorithm has not generated better
+    // results after a specified number of consecutive generations
+    if (
+      leastDistanceSoFar === null ||
+      currStats.minDistance < leastDistanceSoFar
+    ) {
+      leastDistanceSoFar = currStats.minDistance;
+      repeatCounter = 0;
+    } else {
+      repeatCounter++;
+    }
 
     postMessage(currStats);
-  } while (generation <= 300000); // stopping criteria
+
+    // Use the specified upper percentile of the population as the new mating pool
+    const bestPerformers: CityNode[][] = selectUpperPercentile(
+      population,
+      MATING_POOL_PERCENTILE
+    );
+
+    // Choose the specified upper percentile of the mating pool to persist
+    const offSpring: CityNode[][] = selectUpperPercentile(
+      bestPerformers,
+      MATING_POOL_SURVIVOR_PERCENTILE
+    );
+
+    // Continue to generate more offspring until population quota is reached
+    while (offSpring.length < POPULATION_SIZE) {
+      const parentAIndex = Math.floor(Math.random() * bestPerformers.length);
+      const parentBIndex = Math.floor(Math.random() * bestPerformers.length);
+      const children = crossOver(
+        bestPerformers[parentAIndex],
+        bestPerformers[parentBIndex]
+      );
+      children.forEach((child: CityNode[]) => {
+        if (offSpring.length < POPULATION_SIZE) {
+          offSpring.push(mutate(child, MUTATION_RATE));
+        }
+      });
+    }
+
+    population = offSpring;
+    generation++;
+  } while (repeatCounter < 10000);
+
+  const finalStats: Results = calcPopulationStats(
+    [...population],
+    generation++
+  );
+
+  finalStats.duration = Utils.formatTime(moment().diff(startTime));
+  postMessage(finalStats);
+};
+
+/** selectUpperPercentile
+ * @desc Take the top specified percent of the population
+ */
+const selectUpperPercentile = (
+  population: CityNode[][],
+  percentile: number
+) => {
+  return [...population]
+    .sort(
+      (routeA: CityNode[], routeB: CityNode[]) =>
+        calcFitness(routeB) - calcFitness(routeA)
+    )
+    .slice(0, Math.floor(population.length * percentile));
 };
 
 // waits for the signal to trigger the genetic algorithm
-addEventListener('message', ({ data }: { data: GAStartObject }) => {
-  startGeneticAlgorithm(data);
+addEventListener('message', ({ data: allCities }: { data: CityNode[] }) => {
+  startGeneticAlgorithm(allCities);
 });

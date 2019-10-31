@@ -8,6 +8,8 @@ import { CityNode } from '../classes/models/city-node';
 })
 export class GeneticAlgorithmService {
   results = new BehaviorSubject<Results | undefined>(undefined);
+  resultCache = new BehaviorSubject<Results[]>([]);
+
   worker: Worker;
 
   constructor() {
@@ -19,6 +21,9 @@ export class GeneticAlgorithmService {
       this.worker.onmessage = ({ data }) => {
         const results: Results = data;
         this.results.next(results);
+        if (results.duration) {
+          this.resultCache.next([...this.resultCache.getValue(), results]);
+        }
       };
     } else {
       // Web Workers are not supported in this environment.
@@ -28,7 +33,7 @@ export class GeneticAlgorithmService {
   /** startGeneticAlgorithm
    * @desc sends a signal to the web worker to start the specified algorithm
    */
-  startGeneticAlgorithm(algorithm: 1 | 2 | 3 | 4, allCities: CityNode[]) {
-    this.worker.postMessage({ algorithm, allCities });
+  startGeneticAlgorithm(allCities: CityNode[]) {
+    this.worker.postMessage(allCities);
   }
 }

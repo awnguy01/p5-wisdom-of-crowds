@@ -6,6 +6,14 @@
 
 <div class="start-container" *ngIf="(currCities | async) && (currCities | async).length">
   <div class="start-button-wrapper">
+    <button (click)="runGeneticAlgorithm()" [disabled]="(currResults | async) && !(currResults | async).duration">RUN
+      GENETIC
+      ALGORITHM</button>
+  </div>
+  <div *ngIf="currResults | async as results" class="start-button-wrapper">
+    <button (click)="useWisdomOfCrowds()" [disabled]="!results.duration">SWARM</button>
+  </div>
+  <!-- <div class="start-button-wrapper">
     <button (click)="runGeneticAlgorithm(1)">Genetic Algorithm 1</button>
     <span>Crossover Fn 1</span>
     <span>2% Mutation Rate</span>
@@ -24,7 +32,7 @@
     <button (click)="runGeneticAlgorithm(4)">Genetic Algorithm 4</button>
     <span>Crossover Fn 2</span>
     <span>1.5% Mutation Rate</span>
-  </div>
+  </div> -->
 </div>
 
 <ng-container *ngIf="currResults | async as results">
@@ -41,16 +49,16 @@
       </thead>
       <tbody>
         <tr>
-          <td>{{ results.minDistance }}</td>
-          <td>{{ results.maxDistance }}</td>
-          <td>{{ results.avgDistance }}</td>
-          <td>{{ calcStandardDeviation(results.population) }}</td>
+          <td>{{ roundToNearestThousandth(results.minDistance) }}</td>
+          <td>{{ roundToNearestThousandth(results.maxDistance) }}</td>
+          <td>{{ roundToNearestThousandth(results.avgDistance) }}</td>
+          <td>{{ roundToNearestThousandth(calcStandardDeviation(results.population)) }}</td>
           <td>{{ results.generation }}</td>
         </tr>
       </tbody>
     </table>
   </div>
-  <table class="results-route">
+  <table class="results-data-table">
     <tr>
       <th>Min Route</th>
     </tr>
@@ -60,9 +68,42 @@
   </table>
   <div class="time-elapsed">Time elapsed: {{ results.duration }}</div>
 </ng-container>
+
+<table *ngIf="bestRoutes.length" class="results-data-table">
+  <thead>
+    <tr>
+      <th>Experts</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr *ngFor="let route of bestRoutes">{{ route }}</tr>
+  </tbody>
+</table>
+<ng-container *ngIf="crowdRoute.length">
+  <table class="results-data-table">
+    <tr>
+      <th>Crowd Route</th>
+    </tr>
+    <tr>
+      <td>[{{ routeToString(crowdRoute) }}]</td>
+    </tr>
+  </table>
+  <table class="results-data-table">
+    <tr>
+      <th>Crowd Route Distance</th>
+    </tr>
+    <tr>
+      <td>{{ crowdDistance }}</td>
+    </tr>
+  </table>
+</ng-container>
+
 <div class="canvas-container">
   <div id="chartContainer"></div>
 </div>
+
+
+
 <div>
   <div id="costChartContainer"></div>
 </div>

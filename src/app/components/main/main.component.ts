@@ -7,13 +7,14 @@ import { tap } from 'rxjs/operators';
 import * as CanvasJS from 'src/assets/lib/canvasjs.min.js';
 import { Results } from 'src/app/classes/models/results';
 import { GeneticAlgorithmService } from 'src/app/services/genetic-algorithm.service';
+import { CrowdWisdomService } from 'src/app/services/crowd-wisdom.service';
 
 const CHART_OPTS = {
   animationEnabled: true,
   theme: 'dark2',
   zoomEnabled: true,
   title: {
-    text: 'Project 4 Genetic Algorithm'
+    text: 'Project 5 Wisdom of Crowds'
   },
   toolTip: {
     contentFormatter: e => {
@@ -30,7 +31,13 @@ const CHART_OPTS = {
     viewportMaximum: 120
   },
   data: [
-    // { type: 'scatter', dataPoints: [] },
+    {
+      type: 'line',
+      markerType: 'circle',
+      markerSize: 10,
+      dataPoints: []
+    },
+    { type: 'scatter', dataPoints: [] },
     {
       type: 'line',
       markerType: 'circle',
@@ -66,6 +73,7 @@ export class MainComponent implements OnInit {
   @ViewChild('graphCanvas', { static: true }) graphCanvas: ElementRef;
 
   currResults = new BehaviorSubject<Results>(undefined);
+  swarmResults = new BehaviorSubject<Results>(undefined);
   currCities = new BehaviorSubject<CityNode[]>([]);
   selectedHistory = new BehaviorSubject<Results[]>([]);
   generationBreak = 0;
@@ -74,9 +82,14 @@ export class MainComponent implements OnInit {
   chart: any; // Displays the currently shortest traced route
   costChart: any; // Displays the improvement in minimum distance after subsequent generations
 
+  bestRoutes: number[] = [];
+  crowdRoute: CityNode[] = [];
+  crowdDistance: number = 0;
+
   constructor(
     readonly fb: FormBuilder,
-    readonly genAlgSvc: GeneticAlgorithmService
+    readonly genAlgSvc: GeneticAlgorithmService,
+    readonly crowdWisdomSvc: CrowdWisdomService
   ) {}
 
   ngOnInit() {
@@ -89,25 +102,73 @@ export class MainComponent implements OnInit {
 
     this.listenToHistory();
     this.pollResults();
+    this.getResultsCache();
+    this.listenToSwarmResults();
   }
 
   /** pollResults
    * @desc checks the current results every 250 milliseconds to render the graphs
    */
   pollResults(): Subscription {
-    return timer(0, 250).subscribe(() => {
+    let lastMinRouteStr = '';
+    return timer(0, 500).subscribe(() => {
       const currResults: Results = this.currResults.getValue();
       if (currResults) {
-        this.chart.options.data[0].dataPoints = Utils.convertCitiesToDataPoints(
-          currResults.minRoute
-        );
-        this.chart.render();
+        const newMinRouteStr = JSON.stringify(currResults.minRoute);
+        if (newMinRouteStr !== lastMinRouteStr) {
+          console.log('re-rendering');
+          this.chart.options.data[0].dataPoints = Utils.convertCitiesToDataPoints(
+            currResults.minRoute
+          );
+          this.chart.render();
+          lastMinRouteStr = newMinRouteStr;
+        }
         if (currResults.generation >= this.generationBreak) {
           const selectedHistory = this.selectedHistory.getValue();
           this.selectedHistory.next([...selectedHistory, currResults]);
           this.generationBreak += 10000;
         }
       }
+    });
+  }
+
+  /** getResultsCache
+   * @desc gets the list of results generated from various genetic algorithm iterations
+   */
+  getResultsCache(): Subscription {
+    return this.genAlgSvc.resultCache.subscribe((bestResults: Results[]) => {
+      this.bestRoutes = bestResults.map(
+        (result: Results) => result.minDistance
+      );
+    });
+  }
+
+  /** listenToSwarmResults
+   * @desc listen to updates from the wisdom of crowds service
+   */
+  listenToSwarmResults(): Subscription {
+    return this.crowdWisdomSvc.results.subscribe((results: Results) => {
+      this.swarmResults.next(results);
+      const dataPointFragments: any[] = [];
+      results.fragments.forEach((fragment: CityNode[]) => {
+        dataPointFragments.push(...Utils.convertCitiesToDataPoints(fragment));
+        dataPointFragments.push({ x: 0, y: null });
+      });
+      this.chart.options.data[0].dataPoints = dataPointFragments;
+      this.chart.options.data[1].dataPoints = Utils.convertCitiesToDataPoints(
+        results.unusedNodes
+      );
+      const dataPointGreedyPairs: any[] = [];
+      results.greedyPairs.forEach((pair: CityNode[]) => {
+        dataPointGreedyPairs.push(...Utils.convertCitiesToDataPoints(pair));
+        dataPointGreedyPairs.push({ x: 0, y: null });
+      });
+      if (results.crowdRoute && results.crowdRoute.length) {
+        this.crowdRoute = results.crowdRoute;
+        this.crowdDistance = Utils.calcTotalDistance(results.crowdRoute, true);
+      }
+      this.chart.options.data[2].dataPoints = dataPointGreedyPairs;
+      this.chart.options.data[2].dataPoints = this.chart.render();
     });
   }
 
@@ -144,6 +205,9 @@ export class MainComponent implements OnInit {
   tspFileCtrlChanges(): Observable<any> {
     return this.tspFileCtrl.valueChanges.pipe(
       tap((file: File) => {
+        this.currResults.next(undefined);
+        this.genAlgSvc.results.next(undefined);
+        this.genAlgSvc.resultCache.next([]);
         const reader = new FileReader();
 
         reader.onloadend = () => {
@@ -180,13 +244,34 @@ export class MainComponent implements OnInit {
     return Utils.calcStandardDeviation(distances);
   }
 
+  /** roundToNearestThousandth
+   * @desc round a number to the nearest thousandth decimal
+   */
+  roundToNearestThousandth(val: number): number {
+    return Math.round(val * 1000) / 1000;
+  }
+
   /** runGeneticAlgorithm
    * @desc trigger to start a specified genetic algorithm
    */
-  runGeneticAlgorithm(algorithm: 1 | 2 | 3 | 4) {
+  runGeneticAlgorithm() {
     const allCities = this.currCities.getValue();
     if (allCities) {
-      this.genAlgSvc.startGeneticAlgorithm(algorithm, allCities);
+      this.genAlgSvc.startGeneticAlgorithm(allCities);
+    }
+  }
+
+  /** useWisdomOfCrowds
+   * @desc use the wisdom of crowds aggregation technique to find a more optimal solution
+   */
+  useWisdomOfCrowds() {
+    const currResults = this.currResults.getValue();
+    if (currResults.duration) {
+      this.crowdWisdomSvc.consultTheExperts(
+        this.genAlgSvc.resultCache
+          .getValue()
+          .map((result: Results) => Utils.filterDuplicates(result.minRoute))
+      );
     }
   }
 }

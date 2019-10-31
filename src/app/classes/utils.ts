@@ -166,4 +166,75 @@ export class Utils {
   static routeToString(route: CityNode[]): string {
     return route.map((node: CityNode) => node.name).toString();
   }
+
+  /** hasDuplicates
+   * @desc determines if an array has duplicates
+   */
+  static hasDuplicates(list: any[]): boolean {
+    for (const item of list) {
+      const repeatCount: number = list.filter(
+        (listItem: any) => JSON.stringify(listItem) === JSON.stringify(item)
+      ).length;
+      if (repeatCount > 1) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** filterDuplicates
+   * @desc returns a new array with duplicates removed from the original
+   */
+  static filterDuplicates(list: any[]) {
+    return list.filter(
+      (outerVal: any, index: number) =>
+        list.findIndex(
+          (innerVal: any) =>
+            JSON.stringify(outerVal) === JSON.stringify(innerVal)
+        ) === index
+    );
+  }
+
+  /** getDuplicates
+   * @desc return an list of items that were duplicated in the original list
+   */
+  static getDuplicates(list: any[]) {
+    const countMap = {};
+    list.forEach((item: any) => (countMap[item] = (countMap[item] || 0) + 1));
+    return Object.keys(countMap).filter((item: any) => countMap[item] > 1);
+  }
+
+  /** flattenList
+   * @desc recursively returns a flattened array of arrays
+   */
+  static flattenList(list: any[], depth: number) {
+    if (!depth) {
+      return list;
+    }
+    return this.flattenList([].concat(...list), depth - 1);
+  }
+
+  /** arrayIncludes
+   * @desc checks if an element exists in an array using JSON.stringify to compare
+   */
+  static arrayIncludes(list: any[], testItem: any): boolean {
+    return list
+      .map((listItem: any) => JSON.stringify(listItem))
+      .includes(JSON.stringify(testItem));
+  }
+
+  /** getListOfPairs
+   * @desc returns an array of pairs combined from a list
+   */
+  static getListOfPairs(list: any[]): any[] {
+    const pairs: any[] = [];
+    list.forEach((firstItem: any, firstIndex: number) => {
+      list.forEach((secondItem: any, secondIndex: number) => {
+        if (secondIndex > firstIndex) {
+          pairs.push([firstItem, secondItem]);
+        }
+      });
+    });
+    return pairs;
+  }
 }

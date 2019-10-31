@@ -1,7 +1,7 @@
 .header {
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   button {
     height: 1.5rem;
   }
@@ -31,9 +31,15 @@
   margin-bottom: 1rem;
 }
 
-.results-table {
+.results-data-table {
+  width: 100%;
   text-align: center;
+}
+
+.results-table {
   width: 80vw;
+  text-align: center;
+
   tr {
     border-bottom: 1px solid white;
   }
