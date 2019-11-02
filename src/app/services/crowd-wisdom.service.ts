@@ -3,6 +3,7 @@ import { CityNode } from '../classes/models/city-node';
 import { Utils } from '../classes/utils';
 import { Results } from '../classes/models/results';
 import { BehaviorSubject } from 'rxjs';
+import * as moment from 'moment';
 
 @Injectable({
   providedIn: 'root'
@@ -15,6 +16,7 @@ export class CrowdWisdomService {
    * @desc Find a new solution from aggregating the given solutions
    */
   consultTheExperts(experts: CityNode[][]): CityNode[] {
+    const startTime = moment();
     // Look for common subsequences found in a specified percent of the experts
     let nodeFragments: CityNode[][] = this.findConnectedNodes(experts);
     nodeFragments = this.mergeCommonNodeFragments(nodeFragments);
@@ -27,6 +29,9 @@ export class CrowdWisdomService {
     const finalRoute = this.greedyConnectFragments(nodeFragments, experts[0]);
     console.log(finalRoute);
     console.log(Utils.calcTotalDistance(finalRoute, true));
+    const currResults: Results = this.results.getValue();
+    currResults.duration = Utils.formatTime(moment().diff(startTime));
+    this.results.next(currResults);
 
     return finalRoute;
   }
@@ -46,7 +51,7 @@ export class CrowdWisdomService {
         finalFragment[0],
         finalFragment[finalFragment.length - 1]
       ];
-      const finalResults = this.calcCrowdResults(finalPair, nodeList);
+      const finalResults: Results = this.calcCrowdResults(finalPair, nodeList);
       finalResults.crowdRoute = fragmentList[0];
       this.results.next(finalResults);
       return fragmentList[0];
@@ -278,6 +283,10 @@ export class CrowdWisdomService {
     return this.mergeCommonNodeFragments(fixedList);
   }
 
+  /** findConnectedNodes
+   * @desc return a list of node pairs that exist
+   * in at least 90% (floor) of the provided routes
+   */
   findConnectedNodes(experts: CityNode[][]) {
     const nodeList: CityNode[] = experts[0];
     const lastIndex = nodeList.length - 1;

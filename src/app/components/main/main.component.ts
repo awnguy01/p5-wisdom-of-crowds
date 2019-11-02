@@ -8,6 +8,7 @@ import * as CanvasJS from 'src/assets/lib/canvasjs.min.js';
 import { Results } from 'src/app/classes/models/results';
 import { GeneticAlgorithmService } from 'src/app/services/genetic-algorithm.service';
 import { CrowdWisdomService } from 'src/app/services/crowd-wisdom.service';
+import * as moment from 'moment';
 
 const CHART_OPTS = {
   animationEnabled: true,
@@ -70,6 +71,7 @@ const COST_CHART_OPTS = {
   styleUrls: ['./main.component.scss']
 })
 export class MainComponent implements OnInit {
+  runningSeconds = new BehaviorSubject<number>(0);
   @ViewChild('graphCanvas', { static: true }) graphCanvas: ElementRef;
 
   currResults = new BehaviorSubject<Results>(undefined);
@@ -149,6 +151,12 @@ export class MainComponent implements OnInit {
   listenToSwarmResults(): Subscription {
     return this.crowdWisdomSvc.results.subscribe((results: Results) => {
       this.swarmResults.next(results);
+      if (results.duration) {
+        const resultsSeconds = moment.duration(results.duration).asSeconds();
+        this.runningSeconds.next(
+          this.runningSeconds.getValue() + resultsSeconds
+        );
+      }
       const dataPointFragments: any[] = [];
       results.fragments.forEach((fragment: CityNode[]) => {
         dataPointFragments.push(...Utils.convertCitiesToDataPoints(fragment));
@@ -267,6 +275,8 @@ export class MainComponent implements OnInit {
   useWisdomOfCrowds() {
     const currResults = this.currResults.getValue();
     if (currResults.duration) {
+      const resultsSeconds = moment.duration(currResults.duration).asSeconds();
+      this.runningSeconds.next(this.runningSeconds.getValue() + resultsSeconds);
       this.crowdWisdomSvc.consultTheExperts(
         this.genAlgSvc.resultCache
           .getValue()

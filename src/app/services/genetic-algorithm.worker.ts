@@ -206,7 +206,7 @@ const startGeneticAlgorithm = (allCities: CityNode[]): void => {
     while (offSpring.length < POPULATION_SIZE) {
       const parentAIndex = Math.floor(Math.random() * bestPerformers.length);
       const parentBIndex = Math.floor(Math.random() * bestPerformers.length);
-      const children = crossOver(
+      const children: CityNode[][] = crossOver(
         bestPerformers[parentAIndex],
         bestPerformers[parentBIndex]
       );

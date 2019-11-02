@@ -66,7 +66,7 @@
       <td>[{{ routeToString(results.minRoute) }}]</td>
     </tr>
   </table>
-  <div class="time-elapsed">Time elapsed: {{ results.duration }}</div>
+  <div class="time-elapsed">Time elapsed: {{ (runningSeconds | async) * 1000 | timeFormatter }}</div>
 </ng-container>
 
 <table *ngIf="bestRoutes.length" class="results-data-table">
